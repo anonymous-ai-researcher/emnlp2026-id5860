@@ -168,12 +168,3 @@ Hardware: 4x NVIDIA A100 80GB, AMD EPYC 7763, 512 GB RAM.
 MIT License with Responsible Use clause. See [LICENSE](LICENSE).
 
 The benchmark and code are intended for **bias auditing and mitigation research**. Pre-computed steering vectors are not released to prevent misuse.
-
----
-
-## Responsible Use
-
-- All benchmark vignettes are **synthetic** (no real patient data)
-- No protected health information is accessed
-- Findings should be validated on real clinical notes before deployment
-- See Appendix N in the paper for full responsible NLP documentation
