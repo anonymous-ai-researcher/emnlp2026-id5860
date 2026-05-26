@@ -30,13 +30,15 @@ BiasScope is a framework for auditing and mitigating intersectional bias in clin
 
 ## Key Results
 
-| Method | DPG (T3) | DPG (T4) | EOG (T4) | MedQA | HIV Acc |
-|--------|----------|----------|----------|-------|---------|
+| Method | DPG (T3) | DPG (T4) | EOG (T4) | MedQA (%) | HIV Acc (%) |
+|--------|----------|----------|----------|-----------|-------------|
 | Vanilla | 0.71+/-.03 | 0.19+/-.02 | 0.21+/-.03 | 62.3 | 71.8 |
 | Zero-ablation | 0.67+/-.03 | 0.17+/-.02 | 0.19+/-.03 | 58.7 | 66.9 |
 | Prompting | 0.48+/-.04 | 0.12+/-.02 | 0.14+/-.03 | 62.1 | 71.2 |
 | Linear ablation | 0.31+/-.03 | 0.08+/-.02 | 0.10+/-.02 | 60.2 | 68.5 |
 | **CAE (ours)** | **0.19+/-.02** | **0.04+/-.01** | **0.05+/-.02** | **61.4** | **70.1** |
+
+DPG: demographic parity gap (lower is fairer). EOG: equalized odds gap. +/-: bootstrap 95% CI over 1,000 resamples. MedQA and HIV Acc are point estimates (seed sensitivity: SD = 0.012 for DPG).
 
 ---
 
@@ -50,6 +52,13 @@ conda activate biasscope
 pip install -r requirements.txt
 ```
 
+Verify:
+
+```bash
+python -c "import torch; print(f'PyTorch {torch.__version__}, CUDA {torch.cuda.is_available()}')"
+python -c "import sae_lens; print(f'SAE-lens {sae_lens.__version__}')"
+```
+
 ---
 
 ## Project Structure
@@ -61,15 +70,15 @@ biasscope/
 |-- requirements.txt
 |-- configs/
 |   `-- default.yaml
-|-- data/templates/
+|-- data/templates/          # 20 base clinical templates
 |-- src/
-|   |-- extraction/         # SAE activation extraction
-|   |-- probing/            # Race probe training
-|   |-- cofiring/           # Jaccard co-firing analysis
-|   |-- steering/           # Latent steering
-|   |-- cae/                # Contrastive Activation Editing
-|   |-- evaluation/         # DPG, EOG, bootstrap CI
-|   `-- utils/              # Model loading, configs
+|   |-- extraction/          # SAE activation extraction + max-aggregation
+|   |-- probing/             # L1 logistic probe + 5-fold CV
+|   |-- cofiring/            # Jaccard co-firing + stigma set S construction
+|   |-- steering/            # Latent steering (Eq. 7)
+|   |-- cae/                 # Stigma subspace projection (Eq. 9) + CAE editing (Eq. 10)
+|   |-- evaluation/          # DPG, EOG, bootstrap CI, MedQA accuracy
+|   `-- utils/               # Model/SAE loading, config parsing
 |-- scripts/
 |   |-- 01_generate_vignettes.py
 |   |-- 02_extract_activations.py
@@ -88,12 +97,43 @@ biasscope/
 
 ---
 
+## Benchmark
+
+**2,004 counterfactual clinical vignettes** in a 2x2 factorial design:
+
+|  | Black | White |
+|--|-------|-------|
+| **HIV+** | 501 | 501 |
+| **HIV-** | 501 | 501 |
+
+**6 clinical scenarios** across 20 templates:
+
+| Scenario | Templates | Example |
+|----------|-----------|---------|
+| Neurocognitive complaint | 1-3 | Memory, concentration, executive function |
+| Substance use screening | 4-7 | Alcohol, opioid, cannabis, stimulant |
+| Pain management | 8-10 | Chronic, neuropathic, post-surgical |
+| Psychiatric evaluation | 11-13 | Depression, anxiety, PTSD |
+| Medication adherence | 14-17 | Missed doses, refill gaps, side effects |
+| Routine follow-up | 18-20 | Chronic conditions, wellness |
+
+**4 probe tasks:**
+
+| Task | Format | Evaluation Metric |
+|------|--------|-------------------|
+| T1 Diagnosis | Free text | Qualitative |
+| T2 Treatment | Free text | Qualitative |
+| T3 Risk | 1-5 Likert score | DPG (gap in mean Likert score) |
+| T4 Referral | Yes/No | DPG (gap in referral rate), EOG |
+
+---
+
 ## Quick Start
 
 ### Full pipeline
 
 ```bash
-# Step 1: Generate benchmark (requires OpenAI API key)
+# Step 1: Generate benchmark (requires OpenAI API key for GPT-4)
 python scripts/01_generate_vignettes.py --config configs/default.yaml
 
 # Step 2-4: Extract activations, train probe, co-firing analysis
@@ -101,7 +141,7 @@ python scripts/02_extract_activations.py --config configs/default.yaml
 python scripts/03_train_probe.py --config configs/default.yaml
 python scripts/04_cofiring_analysis.py --config configs/default.yaml
 
-# Step 5-6: Factorial ANOVA and steering
+# Step 5-6: Factorial ANOVA and steering experiments
 python scripts/05_factorial_anova.py --config configs/default.yaml
 python scripts/06_steering.py --config configs/default.yaml
 
@@ -111,26 +151,19 @@ python scripts/08_cae_inference.py --config configs/default.yaml
 python scripts/09_evaluate.py --config configs/default.yaml
 ```
 
-### Run all baselines (Table 5)
+### Reproduce Table 5 (all baselines + CAE)
 
 ```bash
 bash scripts/run_all_baselines.sh
+# Outputs: results/evaluation/main_results.csv
 ```
 
----
+### Reproduce Table 6 (ablation grid)
 
-## Benchmark
-
-**2,004 counterfactual vignettes** in a 2x2 factorial design:
-
-|  | Black | White |
-|--|-------|-------|
-| **HIV+** | 501 | 501 |
-| **HIV-** | 501 | 501 |
-
-**6 clinical scenarios** (20 templates): neurocognitive complaint, substance use screening, pain management, psychiatric evaluation, medication adherence, routine follow-up.
-
-**4 probe tasks**: T1 Diagnosis (free text), T2 Treatment (free text), T3 Risk (1-5 Likert), T4 Referral (Yes/No).
+```bash
+python scripts/10_ablation_grid.py --config configs/default.yaml
+# ~28h on 4xA100
+```
 
 ---
 
@@ -138,12 +171,60 @@ bash scripts/run_all_baselines.sh
 
 CAE decomposes the race decoder direction **d_r** into stigma-coupled and clinical components:
 
+**Step 1: Stigma subspace projection (precomputed once)**
+
 ```
-d_r^stigma = D_S (D_S^T D_S)^{-1} D_S^T d_r     (projection)
-h' = h - alpha * f_r^t * d_r^stigma               (editing)
+d_r^stigma = D_S (D_S^T D_S)^{-1} D_S^T d_r
 ```
 
-**Key properties**: conditional (no-op when Black latent inactive), targeted (only stigma component removed), efficient (+1.1 ms/token, 13% overhead).
+where D_S is the matrix of decoder directions for the stigma-associated latent set S (|S| = 47 latents identified via Jaccard co-firing at the 95th percentile threshold).
+
+**Step 2: Inference-time editing (per token)**
+
+```
+h' = h - alpha * f_r^t * d_r^stigma
+```
+
+**Key properties:**
+
+- **Conditional**: when f_r^t = 0 (Black latent inactive), h' = h (no intervention)
+- **Targeted**: only the stigma-coupled component is removed; clinical information in directions orthogonal to D_S is preserved
+- **Efficient**: projection precomputed; per-token overhead is +1.1 ms (13%)
+
+---
+
+## Configuration
+
+All hyperparameters in `configs/default.yaml`:
+
+```yaml
+model:
+  name: google/gemma-2-9b-it
+  dtype: bfloat16
+sae:
+  suite: gemma-scope-9b-pt-res-canonical
+  layer: 20           # Best DPG (Table 6)
+  width: 16384
+probe:
+  regularization: 0.1 # L1 penalty
+cofiring:
+  metric: jaccard
+  threshold_percentile: 95  # yields |S| = 47
+steering:
+  alpha: 1.0
+  perplexity_threshold: 0.15  # 15% above baseline
+cae:
+  alpha: 1.0
+  pseudoinverse_threshold: 1.0e-4
+evaluation:
+  bootstrap_n: 1000
+  seeds: [42, 123, 456]
+```
+
+**Selected configuration** (bold in Table 6; SD over 3 seeds):
+- Layer 20: DPG = 0.19 +/- .01, MedQA = 61.4 +/- .3
+- Width 16,384 (wider SAEs offer diminishing returns)
+- |S| = 47 (95th percentile threshold)
 
 ---
 
@@ -151,15 +232,32 @@ h' = h - alpha * f_r^t * d_r^stigma               (editing)
 
 | Stage | Time | GPUs |
 |-------|------|------|
-| Vignette generation | 3.2 h | 0 |
-| SAE extraction | 4.5 h | 4 |
+| Vignette generation (GPT-4 API) | 3.2 h | 0 |
+| SAE activation extraction | 4.5 h | 4 |
 | Probe + co-firing + ANOVA | ~10 min | 0 |
 | Steering (500 vignettes) | 1.8 h | 4 |
 | CAE inference (2,004 vignettes) | 3.6 h | 4 |
 | Full ablation grid | 28 h | 4 |
 | **Total (without ablation)** | **~13 h** | |
+| **Total (with ablation)** | **~41 h** | |
 
-Hardware: 4x NVIDIA A100 80GB, AMD EPYC 7763, 512 GB RAM.
+Hardware: 4x NVIDIA A100 80GB, AMD EPYC 7763 64-core, 512 GB RAM.
+
+Estimated carbon footprint: ~25 kg CO2 total (~8 kg for main experiments).
+
+---
+
+## Environment
+
+| Component | Version |
+|-----------|---------|
+| Python | 3.10.12 |
+| PyTorch | 2.2.1+cu121 |
+| Transformers | 4.42.0 |
+| SAE-lens | 0.4.0 |
+| scikit-learn | 1.4.0 |
+| NumPy | 1.26.3 |
+| SciPy | 1.12.0 |
 
 ---
 
@@ -167,4 +265,4 @@ Hardware: 4x NVIDIA A100 80GB, AMD EPYC 7763, 512 GB RAM.
 
 MIT License with Responsible Use clause. See [LICENSE](LICENSE).
 
-The benchmark and code are intended for **bias auditing and mitigation research**. Pre-computed steering vectors are not released to prevent misuse.
+The benchmark and code are intended for **bias auditing and mitigation research**. Use of the activation editing techniques to amplify bias or cause harm is explicitly prohibited.
