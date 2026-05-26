@@ -1,0 +1,28 @@
+model:
+  name: google/gemma-2-9b-it
+  dtype: bfloat16
+  max_length: 512
+sae:
+  suite: gemma-scope-9b-pt-res-canonical
+  layer: 20
+  width: 16384
+probe:
+  regularization: 0.1
+  solver: saga
+  max_iter: 5000
+  split_ratio: {train: 0.7, val: 0.1, test: 0.2}
+cofiring:
+  metric: jaccard
+  threshold_percentile: 95
+steering:
+  alpha: 1.0
+  perplexity_threshold: 0.15
+  n_vignettes: 500
+cae:
+  alpha: 1.0
+  pseudoinverse_threshold: 1.0e-4
+evaluation:
+  bootstrap_n: 1000
+  seeds: [42, 123, 456]
+  medqa_n: 200
+  hiv_qa_n: 100
