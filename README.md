@@ -3,7 +3,6 @@
 [![CUDA](https://img.shields.io/badge/CUDA-12.1-green.svg)](https://developer.nvidia.com/cuda-toolkit)
 [![SAE-lens](https://img.shields.io/badge/SAE--lens-0.4%2B-orange.svg)](https://github.com/jbloomAus/SAELens)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Venue](https://img.shields.io/badge/EMNLP-2026-purple.svg)](#)
 
 > **Auditing Intersectional Bias in Clinical LLMs: Sparse Autoencoders Reveal Race-HIV Stigma Circuits**
